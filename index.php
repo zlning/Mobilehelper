@@ -1,6 +1,9 @@
 <?php
 
 define("TOKEN", "wenbo");
+include 'connect_mysql.php';
+include 'connect_yidong.php';
+include 'select_taocan.php';
 
 $wechatObj = new wechatCallbackapiTest();
 
@@ -13,9 +16,8 @@ if (isset($_GET['echostr'])) {
 
 
 
-class wechatCallbackapiTest
-{
-    
+class wechatCallbackapiTest 
+{   
     public function valid()
     {
         $echoStr = $_GET["echostr"];
@@ -59,149 +61,166 @@ class wechatCallbackapiTest
                         <Content><![CDATA[%s]]></Content>
                         <FuncFlag>0</FuncFlag>
                         </xml>";
-           $state = 0;
-            $con=mysql_connect(SAE_MYSQL_HOST_M.':'.SAE_MYSQL_PORT,SAE_MYSQL_USER,SAE_MYSQL_PASS);
-            mysql_select_db(SAE_MYSQL_DB,$con);
-            if($con){
-                $flag = 0;
-                if($result = mysql_query("SELECT * FROM mobilehelper_user  WHERE ID='$fromUsername'")){
-                    while($row = mysql_fetch_array($result)){
-                        if($row['ID']==$fromUsername){
-                        	$flag = 1;
-                        	$retstr="Find succeed.\n";
-                            $state = $row['state'];
-                        }
-    				}
-                    if($flag==0){
-                    	mysql_select_db(SAE_MYSQL_DB,$con);
-                		mysql_query("INSERT INTO mobilehelper_user (ID , state)  VALUES ( '$fromUsername', '0')");
-                		$retstr="New succeed.\n";
-                    }
-                }
-                else{
-    				
-                }
-            }else{
-                $retstr="Connect error.\n";
-            }
-            mysql_close($con);
+            $state = FindUser($fromUsername);
+            $OrignState = $state;
+            $state = $state % 10;
+            $msgType = "text";
+            $datedata  = date("Y-m-d-H:i:s",time());
             switch($state)
             {
                 case "0":
 	            	switch($keyword)
     	       	 	{
-        	        	case "4" :
-            	    		$msgType = "text";
-	            	        $contentStr = date("Y-m-d H:i:s",time())."\n欢迎来到Mobilehelper,我们为大家提供了如下的服务：\n 1.天气查询  \n 2.话费查询  \n 3.套餐最优查询 \n 4.菜单 \n";
+        	        	case "0" :
+	            	        $contentStr = date("Y-m-d H:i:s",time())."\n欢迎来到Mobilehelper,我们为大家提供了如下的服务：\n 1.天气查询  \n 2.话费查询  \n 3.套餐最优查询 \n 0.菜单 \n";
     	            		$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
-        	       		 	echo $resultStr;
             	    		break;
-                
 	                	case "1" :
-    	            		$msgType = "text";
+                        	ChangeState($fromUsername,'1');
 	    	             	$contentStr = "请输入您要查询的城市：\n";
-    	    	        	$con=mysql_connect(SAE_MYSQL_HOST_M.':'.SAE_MYSQL_PORT,SAE_MYSQL_USER,SAE_MYSQL_PASS);
-        	    			mysql_select_db(SAE_MYSQL_DB,$con);
-            	    		mysql_query("UPDATE mobilehelper_user SET state = '1' WHERE ID = '$fromUsername'");
-                			mysql_close($con);
 	                 		$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
-		                 	echo $resultStr;
     		            	break;
                         case "2" :
-                        	$msgType = "text";
+                        	ChangeState($fromUsername,'2');
 	    	             	$contentStr = "请输入您的手机号码：\n";
-    	    	        	$con=mysql_connect(SAE_MYSQL_HOST_M.':'.SAE_MYSQL_PORT,SAE_MYSQL_USER,SAE_MYSQL_PASS);
-        	    			mysql_select_db(SAE_MYSQL_DB,$con);
-            	    		mysql_query("UPDATE mobilehelper_user SET state = '2' WHERE ID = '$fromUsername'");
-                			mysql_close($con);
 	                 		$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
-		                 	echo $resultStr;
     		            	break;
-        		        
-                        /*case "5" :
-                			$msgType = "text";
-                			$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $fromUsername);
-	                 		echo $resultStr;
-    	            		break;
-        	        
-                        case "6" :
-    	            		$msgType = "text";
-        	        		$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $toUsername);
-            	     		echo $resultStr;
-                			break;
-	                	case "7" :
-    	            		$msgType = "text";
-        	        		$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $state);
-            	     		echo $resultStr;
-                			break;*/
-						case "0" :
-    		            	$msgType = "text";
-        		        	$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $retstr);
-            		     	echo $resultStr;
-                			break;
-                
+                        case "3":
+                        	ChangeState($fromUsername,'3');
+	    	             	$contentStr = "请输入您希望的通话量(分钟)：\n";
+	                 		$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
+    		            	break;
                 		default :
-	                		$msgType = "text";
-    	            		$contentStr = date("Y-m-d H:i:s",time())."\n欢迎来到Mobilehelper,我们为大家提供了如下的服务：\n 1.天气查询  \n 2.话费查询  \n 3.套餐最优查询 \n 4.菜单 \n";
-        	        		$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
-            	   	 		echo $resultStr;
+                        	$RX_TYPE = trim($postObj->MsgType);
+            				switch ($RX_TYPE)
+            				{
+                				case "event":
+                					$result = $this->receiveEvent($postObj);
+                    				break;
+                				case "text":
+                    				$msgType = "text";
+    	            				$contentStr = date("Y-m-d H:i:s",time())."\n欢迎来到Mobilehelper,我们为大家提供了如下的服务：\n 1.天气查询  \n 2.话费查询  \n 3.套餐最优查询 \n 0.菜单 \n";
+        	        				$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
+                    				break;
+            				}
             		}
                 	break;
                 case "1":
                 	if($keyword==4){
-                    	$con=mysql_connect(SAE_MYSQL_HOST_M.':'.SAE_MYSQL_PORT,SAE_MYSQL_USER,SAE_MYSQL_PASS);
-            			mysql_select_db(SAE_MYSQL_DB,$con);
-                		mysql_query("UPDATE mobilehelper_user SET state = '0' WHERE ID = '$fromUsername'");
-                		mysql_close($con);
-                    	$msgType = "text";
-                    	$contentStr = date("Y-m-d H:i:s",time())."\n欢迎来到Mobilehelper,我们为大家提供了如下的服务：\n 1.天气查询  \n 2.话费查询  \n 3.套餐最优查询 \n 4.菜单 \n";
+                    	ChangeState($fromUsername,'0');
+                    	$contentStr = $keyword."1";
                 		$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
-               	 		echo $resultStr;
                 	}
                 	else{
-                        $con=mysql_connect(SAE_MYSQL_HOST_M.':'.SAE_MYSQL_PORT,SAE_MYSQL_USER,SAE_MYSQL_PASS);
-            			mysql_select_db(SAE_MYSQL_DB,$con);
-                		mysql_query("UPDATE mobilehelper_user SET state = '0' WHERE ID = '$fromUsername'");
-                		mysql_close($con);
+                        ChangeState($fromUsername,'0');
                         $this->responseCityWeather($postStr);
                     }
                 	break;
                 case "2":
-                	if($keyword==4){
-                    	$con=mysql_connect(SAE_MYSQL_HOST_M.':'.SAE_MYSQL_PORT,SAE_MYSQL_USER,SAE_MYSQL_PASS);
-            			mysql_select_db(SAE_MYSQL_DB,$con);
-                		mysql_query("UPDATE mobilehelper_user SET state = '0' WHERE ID = '$fromUsername'");
-                		mysql_close($con);
+                	$OrignState = ($OrignState-$state)/10;
+                	$state = $OrignState % 10;
+                	if($keyword==0){
+                    	ChangeState($fromUsername,'0');
                     	$msgType = "text";
-                    	$contentStr = date("Y-m-d H:i:s",time())."\n欢迎来到Mobilehelper,我们为大家提供了如下的服务：\n 1.天气查询  \n 2.话费查询  \n 3.套餐最优查询 \n 4.菜单 \n";
+                    	$contentStr = date("Y-m-d H:i:s",time())."\n欢迎来到Mobilehelper,我们为大家提供了如下的服务：\n 1.天气查询  \n 2.话费查询  \n 3.套餐最优查询 \n 0.菜单 \n";
                 		$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
-               	 		echo $resultStr;
-                	}
-                	else if($keyword==0){
-                    	$mobile="00000000000000000";
-                    	$con=mysql_connect(SAE_MYSQL_HOST_M.':'.SAE_MYSQL_PORT,SAE_MYSQL_USER,SAE_MYSQL_PASS);
-            			mysql_select_db(SAE_MYSQL_DB,$con);
-                        if($result = mysql_query("SELECT * FROM mobilehelper_user  WHERE ID='$fromUsername'")){
-                    		while($row = mysql_fetch_array($result))
-                        		if($row['ID']==$fromUsername)
-                            		$mobile = $row['mobile'];
-                        }
-                        mysql_close($con);
-                        $msgType = "text";
-        		       	$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $mobile);
-            		    echo $resultStr;
                 	}
                 	else{
-                        $con=mysql_connect(SAE_MYSQL_HOST_M.':'.SAE_MYSQL_PORT,SAE_MYSQL_USER,SAE_MYSQL_PASS);
-            			mysql_select_db(SAE_MYSQL_DB,$con);
-                        mysql_query("UPDATE mobilehelper_user SET mobile = '$keyword' WHERE ID = '$fromUsername'");
-                        mysql_query("UPDATE mobilehelper_user SET state = '0' WHERE ID = '$fromUsername'");
-                		mysql_close($con);
-                        $msgType = "text";
-        		        $resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $keyword);
-            		    echo $resultStr;
+                        switch($state)
+                        {
+                            case 0:
+                        		ChangeState($fromUsername,'12');
+                        		ChangeKey($fromUsername,"mobile",$keyword);
+                        		CheckIn_Yidong($keyword,$fromUsername,$datedata);
+                				$picTpl = "<xml>
+									<ToUserName><![CDATA[%s]]></ToUserName>
+									<FromUserName><![CDATA[%s]]></FromUserName>
+									<CreateTime>%s</CreateTime>
+									<MsgType><![CDATA[%s]]></MsgType>
+									<ArticleCount>1</ArticleCount>
+									<Articles>
+									<item>
+									<Title><![CDATA[%s]]></Title>
+									<Description><![CDATA[%s]]></Description>
+									<PicUrl><![CDATA[%s]]></PicUrl>
+                            		<Url><![CDATA[%s]]></Url>
+									</item>
+									</Articles>
+									<FuncFlag>1</FuncFlag>
+									</xml> ";
+                        		$msgType = "news";
+								$title = "验证码";
+								$data  = date('Y-m-d');
+								$desription = "点击打开图片，然后回复验证码";
+								$image = "http://mobilehelp-test.stor.sinaapp.com/".$fromUsername.$datedata.".jpg";
+                        		$turl = "http://mobilehelp-test.stor.sinaapp.com/".$fromUsername.$datedata.".jpg";
+                				$resultStr = sprintf($picTpl, $fromUsername, $toUsername, $time, $msgType, $title,$desription,$image,$turl);
+                            	break;
+                          case 1:
+                            	ChangeState($fromUsername,'22');
+                            	ChangeKey($fromUsername,"yanzheng",$keyword);
+                    			$contentStr ="请输入服务号\n";
+                				$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
+                            	break;
+                          case 2:
+                            	ChangeState($fromUsername,'0');
+                    			$contentStr =$keyword;
+                				$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
+                            	break;
+                        }
                     }
-            }
+                	break;
+                case "3":
+                	$OrignState = ($OrignState-$state)/10;
+                	$state = $OrignState % 10;
+                	if($keyword==4){
+                    	ChangeState($fromUsername,'0');
+                    	$contentStr = date("Y-m-d H:i:s",time())."\n欢迎来到Mobilehelper,我们为大家提供了如下的服务：\n 1.天气查询  \n 2.话费查询  \n 3.套餐最优查询 \n 0.菜单 \n";
+                		$resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
+                	}
+                	else{
+                        switch($state)
+                        {
+                            case 0:
+                            	ChangeState($fromUsername,'13');
+                        		ChangeKey($fromUsername,"tonghua",$keyword);
+	    	            		$contentStr = "请输入您希望的流量（M）：\n";
+                            	break;
+                            case 1:
+                            	ChangeState($fromUsername,'23');
+                        		ChangeKey($fromUsername,"liuliang",$keyword);
+	    	            		$contentStr = "请输入您希望的短信量（条）：\n";
+                            	break;
+                            case 2:
+                            	ChangeState($fromUsername,'33');
+                        		ChangeKey($fromUsername,"duanxin",$keyword);
+                            	$contentStr = "选择公司：\nYD:移动\nLT:联通";
+                            	break;
+                            case 3:
+                            	$contentStr = $keyword;
+                            	if($keyword=='YD'||$keyword=='yD'||$keyword=='Yd'||$keyword=='yd')
+                                {
+        							$contentStr = YD_SelectBestTaocan($fromUsername);
+                                }
+                            	else if($keyword=='LT'||$keyword=='Lt'||$keyword=='lT'||$keyword=='lt')
+                                {
+                                    $contentStr = LT_SelectBestTaocan($fromUsername);
+                                }
+                            	else
+                                {
+                                    $contentStr = "不返回最佳套餐";
+                                }
+                            	 
+                            	ChangeState($fromUsername,'0');
+                            	break;
+                            default:
+                            	$contentStr = "Error\n";
+                        }
+                        $resultStr = sprintf($textTpl, $fromUsername, $toUsername, $time, $msgType, $contentStr);
+                    }
+                break;
+             }
+            echo $resultStr;
         }else{
             echo "";
             exit;
@@ -215,29 +234,8 @@ class wechatCallbackapiTest
          $postStr = $GLOBALS["HTTP_RAW_POST_DATA"];
          if (!empty($postStr)){
             $postObj = simplexml_load_string($postStr, 'SimpleXMLElement', LIBXML_NOCDATA);
-            $fromUsername = $postObj->FromUserName;
-            $toUsername = $postObj->ToUserName;
-            $keyword = trim($postObj->Content);
-            $time = time();
-            $textTpl = "<xml>
-                        <ToUserName><![CDATA[%s]]></ToUserName>
-                        <FromUserName><![CDATA[%s]]></FromUserName>
-                        <CreateTime>%s</CreateTime>
-                        <MsgType><![CDATA[%s]]></MsgType>
-                        <Content><![CDATA[%s]]></Content>
-                        <FuncFlag>0</FuncFlag>
-                        </xml>";
             $RX_TYPE = trim($postObj->MsgType);
-            switch ($RX_TYPE)
-            {
-                case "event":
-                	$result = $this->receiveEvent($postObj);
-                    break;
-                case "text":
-                    $result = $this->receiveText($postObj);
-                    break;
-            }
-            $this->logger("T ".$result);
+            $result = $this->receiveText($postObj);
             echo $result;
         }else{
             $msgType = "text";
@@ -248,7 +246,7 @@ class wechatCallbackapiTest
         }
         return 0;
     }
-    
+             
      private function receiveEvent($object)
     {
         $content = "";
@@ -314,10 +312,7 @@ class wechatCallbackapiTest
         $result = sprintf($newsTpl, $object->FromUserName, $object->ToUserName, time(), count($newsArray));
         return $result;
     }
-    private function logger($log_content)
-    {
 
-    }
         
 }
 ?>
